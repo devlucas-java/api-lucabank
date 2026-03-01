@@ -7,8 +7,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
-
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/user")
@@ -34,7 +35,13 @@ public class UsersController {
     @PreAuthorize("hasAuthority('USER_READ')")
     @GetMapping("/profile")
     public ResponseEntity<UsersResponse> getMe(@AuthenticationPrincipal Users users) {
-        UsersResponse user = usersService.getUserAuthenticated(users);
-        return ResponseEntity.status(HttpStatus.OK).body(user);
+
+        log.debug("Fetching authenticated user profile: {}", users.getEmail());
+
+        UsersResponse userResponse = usersService.getAuthenticatedUser(users);
+
+        log.debug("Authenticated user profile returned successfully: {}", users.getEmail());
+
+        return ResponseEntity.status(HttpStatus.OK).body(userResponse);
     }
 }

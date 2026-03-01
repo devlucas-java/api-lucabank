@@ -5,23 +5,26 @@ import com.github.devlucasjava.apilucabank.dto.response.UsersResponse;
 import com.github.devlucasjava.apilucabank.exception.ResourceNotFoundException;
 import com.github.devlucasjava.apilucabank.model.Users;
 import com.github.devlucasjava.apilucabank.repository.UsersRepository;
-import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.access.AccessDeniedException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UsersService {
 
-    @Autowired
-    private UsersMapper usersMapper;
     private final UsersRepository usersRepository;
+    private final UsersMapper usersMapper;
 
-    public UsersResponse getUserAuthenticated(Users users) {
-        Users user = usersRepository.findByEmailOrPassport(users.getEmail())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        return usersMapper.toUsersResponse(user);
+    public UsersResponse getAuthenticatedUser(Users user) {
+        Users foundUser = usersRepository.findByEmailOrPassport(user.getEmail())
+                .orElseThrow(() -> {
+                    log.warn("Authenticated user not found: {}", user.getEmail());
+                    return new ResourceNotFoundException("User not found");
+                });
+
+        log.debug("Authenticated user retrieved: {}", foundUser.getEmail());
+        return usersMapper.toUsersResponse(foundUser);
     }
 }

@@ -4,10 +4,11 @@ import com.github.devlucasjava.apilucabank.exception.CustomSignatureException;
 import com.github.devlucasjava.apilucabank.exception.TokenExpiredException;
 import com.github.devlucasjava.apilucabank.model.Users;
 import io.jsonwebtoken.*;
+import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import io.jsonwebtoken.security.Keys;
+
 import java.security.Key;
 import java.time.Instant;
 import java.util.Date;
@@ -17,54 +18,66 @@ import java.util.Map;
 @Service
 public class JwtService {
 
-    public Long jwtExpiration;
-    private final Key key;
+    public final Long jwtExpiration;
+    private final Key signingKey;
 
-    // Constructor with variable of systems
-    public JwtService(@Value("${jwt.secret}") String jwtSecret,
-                      @Value("${jwt.expiration}") Long jwtExpiration
+    public JwtService(
+            @Value("${jwt.secret}") String jwtSecret,
+            @Value("${jwt.expiration}") Long jwtExpiration
     ) {
         this.jwtExpiration = jwtExpiration;
-        this.key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
+        this.signingKey = Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
 
-    public String generateToken(Users users) {
+    public String generateToken(Users user) {
         Instant now = Instant.now();
-        return Jwts.builder()
-                .setSubject(users.getUsername())
+        String token = Jwts.builder()
+                .setSubject(user.getUsername())
                 .setIssuedAt(Date.from(now))
                 .setExpiration(Date.from(now.plusSeconds(jwtExpiration)))
                 .addClaims(Map.of(
-                        "roles", users.getAuthorities().stream()
+                        "roles", user.getAuthorities().stream()
                                 .map(auth -> auth.getAuthority())
                                 .toList()
                 ))
-                .signWith(key, SignatureAlgorithm.HS384) // balance between safety and performance
+                .signWith(signingKey, SignatureAlgorithm.HS384)
                 .compact();
+
+        log.debug("Generated JWT for user: {}", user.getUsername());
+        return token;
     }
 
-    public Claims parseChains(String token) {
+    public Claims parseClaims(String token) {
         try {
             return Jwts.parserBuilder()
-                    .setSigningKey(key)
+                    .setSigningKey(signingKey)
                     .build()
                     .parseClaimsJws(token)
                     .getBody();
         } catch (ExpiredJwtException e) {
-            throw new TokenExpiredException("Token Expired");
+            log.warn("JWT token expired: {}", token);
+            throw new TokenExpiredException("Token expired");
         } catch (JwtException e) {
-            throw new CustomSignatureException("Token Invalid");
+            log.error("Invalid JWT token: {}", token);
+            throw new CustomSignatureException("Token invalid");
         }
     }
 
     public String extractUsername(String token) {
-        return parseChains(token).getSubject();
+        return parseClaims(token).getSubject();
     }
-    public boolean isTokenValid(String token, Users users) {
-        final String username = extractUsername(token);
-        return username.equals(users.getUsername()) && !isTokenExpired(token);
+
+    public boolean isTokenValid(String token, Users user) {
+        String username = extractUsername(token);
+        boolean valid = username.equals(user.getUsername()) && !isTokenExpired(token);
+        log.debug("Token validation for user {}: {}", user.getUsername(), valid);
+        return valid;
     }
+
     public boolean isTokenExpired(String token) {
-        return parseChains(token).getExpiration().before(Date.from(Instant.now()));
+        Date expiration = parseClaims(token).getExpiration();
+        boolean expired = expiration.before(Date.from(Instant.now()));
+        log.trace("Token expiration check: {} (expires at {})", expired, expiration);
+        return expired;
     }
 }

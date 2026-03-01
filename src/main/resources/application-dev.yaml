@@ -3,15 +3,12 @@
 jwt:
   secret: sua-chave-secreta-muito-longa-com-mais-de-48-caracteres-para-hs384-aqui-abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789
   expiration: 86400
-
 spring:
   config:
     activate:
       on-profile: dev
-
   cors:
-    allowed-origins:
-      http://localhost:*
+    allowed-origins: http://localhost:*
 
   datasource:
     url: jdbc:postgresql://localhost:5432/cursodb
@@ -23,9 +20,10 @@ spring:
     hibernate:
       ddl-auto: update
     database-platform: org.hibernate.dialect.PostgreSQLDialect
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
+
 server:
   port: 8080

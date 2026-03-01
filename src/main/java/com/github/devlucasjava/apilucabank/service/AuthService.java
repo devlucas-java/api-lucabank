@@ -1,6 +1,5 @@
 package com.github.devlucasjava.apilucabank.service;
 
-
 import com.github.devlucasjava.apilucabank.dto.mapper.AuthMapper;
 import com.github.devlucasjava.apilucabank.dto.mapper.RegisterMapper;
 import com.github.devlucasjava.apilucabank.dto.request.LoginRequest;
@@ -15,11 +14,13 @@ import com.github.devlucasjava.apilucabank.repository.RoleRepository;
 import com.github.devlucasjava.apilucabank.repository.UsersRepository;
 import com.github.devlucasjava.apilucabank.security.JwtService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -33,22 +34,29 @@ public class AuthService {
     public AuthResponse register(RegisterRequest request) {
 
         if (usersRepository.findByEmail(request.getEmail()).isPresent()) {
+            log.warn("Registration failed: email already registered - {}", request.getEmail());
             throw new ResourceConflictException("Email already registered");
         }
+
         if (usersRepository.findByPassport(request.getPassport()).isPresent()) {
+            log.warn("Registration failed: passport already registered - {}", request.getPassport());
             throw new ResourceConflictException("Passport already registered");
         }
-         final Role role = roleRepository.findByName("USER")
-                .orElseThrow(() -> new InternalErrorServerException("Default role not configured"));
+
+        Role defaultRole = roleRepository.findByName("USER")
+                .orElseThrow(() -> {
+                    log.error("Default role 'USER' not configured");
+                    return new InternalErrorServerException("Default role not configured");
+                });
 
         Users user = RegisterMapper.toUsers(request);
-        user.setRole(role);
+        user.setRole(defaultRole);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
 
         usersRepository.save(user);
+        log.debug("New user registered: {}", user.getEmail());
 
-        final String token = jwtService.generateToken(user);
-
+        String token = jwtService.generateToken(user);
         AuthResponse response = AuthMapper.toAuthResponse(user);
         response.setAccessToken(token);
         response.setExpiresIn(jwtService.jwtExpiration);
@@ -56,21 +64,28 @@ public class AuthService {
         return response;
     }
 
+    public AuthResponse authenticate(LoginRequest request) {
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getLogin(), request.getPassword())
+            );
+            log.debug("Authentication successful for login: {}", request.getLogin());
+        } catch (Exception ex) {
+            log.warn("Authentication failed for login: {}", request.getLogin());
+            throw new CustomAuthException("Invalid credentials");
+        }
 
-    public AuthResponse authenticate(LoginRequest request){
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.getLogin(),
-                        request.getPassword()
-                )
-        );
-        Users users = usersRepository.findByEmailOrPassport(request.getLogin())
-                .orElseThrow(() -> new CustomAuthException("User not found"));
+        Users user = usersRepository.findByEmailOrPassport(request.getLogin())
+                .orElseThrow(() -> {
+                    log.warn("Authentication failed: user not found - {}", request.getLogin());
+                    return new CustomAuthException("User not found");
+                });
 
-        final String token = jwtService.generateToken(users);
-        AuthResponse response = AuthMapper.toAuthResponse(users);
+        String token = jwtService.generateToken(user);
+        AuthResponse response = AuthMapper.toAuthResponse(user);
         response.setAccessToken(token);
         response.setExpiresIn(jwtService.jwtExpiration);
+
         return response;
     }
 }

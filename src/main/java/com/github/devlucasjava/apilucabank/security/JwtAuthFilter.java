@@ -1,13 +1,14 @@
 package com.github.devlucasjava.apilucabank.security;
 
-
 import com.github.devlucasjava.apilucabank.exception.CustomSignatureException;
 import com.github.devlucasjava.apilucabank.exception.TokenExpiredException;
+import com.github.devlucasjava.apilucabank.model.Users;
 import com.github.devlucasjava.apilucabank.repository.UsersRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -17,6 +18,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 
+@Slf4j
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
@@ -48,21 +50,24 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 usersRepository.findByEmailOrPassport(username)
                         .ifPresent(user -> {
                             if (jwtService.isTokenValid(token, user)) {
-                                var authToken = new UsernamePasswordAuthenticationToken(
-                                        user, null, user.getAuthorities()
-                                );
+                                UsernamePasswordAuthenticationToken authToken =
+                                        new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
                                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                                 SecurityContextHolder.getContext().setAuthentication(authToken);
+
+                                log.debug("User authenticated successfully: {}", user.getEmail());
                             }
                         });
             }
 
         } catch (TokenExpiredException e) {
+            log.warn("JWT expired for request to {}: {}", request.getServletPath(), e.getMessage());
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json");
             response.getWriter().write("{\"error\": \"Token expirado\"}");
             return;
         } catch (CustomSignatureException e) {
+            log.warn("Invalid JWT for request to {}: {}", request.getServletPath(), e.getMessage());
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json");
             response.getWriter().write("{\"error\": \"Token inválido\"}");
@@ -72,16 +77,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
         String path = request.getServletPath();
-
-        List<String> paths = List.of(
-                "/auth/**"
-        );
-
-        return paths.stream().anyMatch(path::startsWith);
+        List<String> excludedPaths = List.of("/auth/**");
+        return excludedPaths.stream().anyMatch(path::startsWith);
     }
-
 }

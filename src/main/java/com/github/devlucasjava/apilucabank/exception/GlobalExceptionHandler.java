@@ -1,9 +1,9 @@
 package com.github.devlucasjava.apilucabank.exception;
 
-
 import com.github.devlucasjava.apilucabank.exception.utils.JsonParseErrorExtractor;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @ControllerAdvice
 @RequiredArgsConstructor
 public class GlobalExceptionHandler {
@@ -28,15 +29,23 @@ public class GlobalExceptionHandler {
         body.put("error", error);
         body.put("message", message);
         body.put("path", request.getRequestURI());
+
+        // Log errors
+        if (status.is5xxServerError()) {
+            log.error("{} | {} | {}", status.value(), error, message);
+        } else if (status.is4xxClientError()) {
+            log.warn("{} | {} | {}", status.value(), error, message);
+        } else {
+            log.info("{} | {} | {}", status.value(), error, message);
+        }
+
         return ResponseEntity.status(status).body(body);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<Map<String, Object>> hanlderJsonParseError(HttpMessageNotReadableException ex, HttpServletRequest request) {
-
+    public ResponseEntity<Map<String, Object>> handleJsonParseError(HttpMessageNotReadableException ex, HttpServletRequest request) {
         String message = JsonParseErrorExtractor.extractMessage(ex);
-
-        return buildResponse(HttpStatus.BAD_REQUEST, message,"Error processing Json", request);
+        return buildResponse(HttpStatus.BAD_REQUEST, message, "Error processing JSON", request);
     }
 
     @ExceptionHandler(ResourceNotFoundException.class)
@@ -49,15 +58,15 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
         Map<String, String> errors = new HashMap<>();
-        ex.getBindingResult().getFieldErrors().forEach(error -> {
-            errors.put(error.getField(), error.getDefaultMessage());
-        });
+        ex.getBindingResult().getFieldErrors().forEach(error -> errors.put(error.getField(), error.getDefaultMessage()));
 
         Map<String, Object> body = new HashMap<>();
         body.put("timestamp", Instant.now());
         body.put("status", HttpStatus.BAD_REQUEST.value());
         body.put("path", request.getRequestURI());
         body.put("errors", errors);
+
+        log.warn("Validation errors for {}: {}", request.getRequestURI(), errors);
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
@@ -67,25 +76,25 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleAuthorizationDenied(
             AuthorizationDeniedException ex,
             HttpServletRequest request) {
-
-        return buildResponse(HttpStatus.FORBIDDEN, "Access Denied", "You do not have permission to access this resource.", request);
+        return buildResponse(HttpStatus.FORBIDDEN, "Access Denied",
+                "You do not have permission to access this resource.", request);
     }
 
     @ExceptionHandler(TokenExpiredException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
-    public ResponseEntity<Map<String, Object>> hendleTokenExpired(TokenExpiredException ex, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> handleTokenExpired(TokenExpiredException ex, HttpServletRequest request) {
         return buildResponse(HttpStatus.UNAUTHORIZED, "Token Expired", ex.getMessage(), request);
     }
 
     @ExceptionHandler(CustomSignatureException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
-    public ResponseEntity<Map<String, Object>> hendleTokenExpired(CustomSignatureException ex, HttpServletRequest request) {
-        return buildResponse(HttpStatus.UNAUTHORIZED, "Token invalid", ex.getMessage(), request);
+    public ResponseEntity<Map<String, Object>> handleTokenInvalid(CustomSignatureException ex, HttpServletRequest request) {
+        return buildResponse(HttpStatus.UNAUTHORIZED, "Token Invalid", ex.getMessage(), request);
     }
 
     @ExceptionHandler(InternalErrorServerException.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public ResponseEntity<Map<String, Object>> hendleInternalError(InternalErrorServerException ex, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> handleInternalError(InternalErrorServerException ex, HttpServletRequest request) {
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", ex.getMessage(), request);
     }
 
@@ -106,12 +115,4 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleForbidden(ForbiddenException ex, HttpServletRequest request) {
         return buildResponse(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage(), request);
     }
-
-    /// I'll deal with it as soon as I have time.
-//    @ExceptionHandler(Exception.class)
-//    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-//    public ResponseEntity<Map<String, Object>> handleAll(Exception ex, HttpServletRequest request) {
-//
-//        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "An unexpected error occurred", request);
-//    }
 }

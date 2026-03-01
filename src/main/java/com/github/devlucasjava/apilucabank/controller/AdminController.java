@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -14,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/admin")
@@ -32,7 +34,13 @@ public class AdminController {
             @RequestParam(required = false)
             @Parameter(description = "Number of records per page", example = "10") Integer size
     ) {
+        log.debug("Admin /users endpoint called | filter: firstName={}, lastName={}, isActive={}, isLocked={}, page={}, size={}",
+                filter.firstName(), filter.lastName(), filter.isActive(), filter.isLocked(), page, size);
+
         Page<UsersResponse> users = adminService.findUsers(filter, size, page);
+
+        log.debug("Admin /users endpoint returned {} users", users.getTotalElements());
+
         return ResponseEntity.status(HttpStatus.OK).body(users);
     }
 }
